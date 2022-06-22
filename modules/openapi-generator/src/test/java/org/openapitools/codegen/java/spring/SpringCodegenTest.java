@@ -1432,4 +1432,61 @@ public class SpringCodegenTest {
                 "consumes", "{ \"application/octet-stream\", \"application/*\" }"
             ));
     }
+
+    @Test
+    public void shouldUseGson() throws IOException {
+        File output = Files.createTempDirectory("test").toFile().getCanonicalFile();
+        output.deleteOnExit();
+        String outputPath = output.getAbsolutePath().replace('\\', '/');
+
+        OpenAPI openAPI = new OpenAPIParser()
+                .readLocation("src/test/resources/3_0/petstore.yaml", null, new ParseOptions()).getOpenAPI();
+
+        SpringCodegen codegen = new SpringCodegen();
+        codegen.setOutputDir(output.getAbsolutePath());
+        codegen.additionalProperties().put(CXFServerFeatures.LOAD_TEST_DATA_FROM_FILE, "true");
+        codegen.additionalProperties().put(CodegenConstants.SERIALIZATION_LIBRARY, "gson");
+
+        ClientOptInput input = new ClientOptInput();
+        input.openAPI(openAPI);
+        input.config(codegen);
+
+        DefaultGenerator generator = new DefaultGenerator();
+
+        generator.setGeneratorPropertyDefault(CodegenConstants.MODELS, "true");
+        generator.setGeneratorPropertyDefault(CodegenConstants.MODEL_TESTS, "false");
+        generator.setGeneratorPropertyDefault(CodegenConstants.MODEL_DOCS, "false");
+        generator.setGeneratorPropertyDefault(CodegenConstants.APIS, "false");
+        generator.setGeneratorPropertyDefault(CodegenConstants.SUPPORTING_FILES, "true");
+        generator.opts(input).generate();
+
+        JavaFileAssert.assertThat(Paths.get(outputPath + "/src/main/java/org/openapitools/model/Order.java"))
+                .assertTypeAnnotations()
+                .hasSize(2)
+                .toType()
+                .hasProperty("petId")
+                .assertPropertyAnnotations()
+                .hasSize(1)
+                .containsWithNameAndAttributes("SerializedName", ImmutableMap.of("value", "\"petId\""));
+
+        String pom = new String(Files.readAllBytes(Paths.get(outputPath + "/pom.xml")));
+        Assertions.assertThat(pom)
+                .contains(
+                        "        <dependency>\n" +
+                                "            <groupId>com.google.code.gson</groupId>\n" +
+                                "            <artifactId>gson</artifactId>\n" +
+                                "            <version>${gson.version}</version>\n" +
+                                "        </dependency>"
+                ).doesNotContain(
+                        "        <dependency>\n" +
+                                "            <groupId>com.fasterxml.jackson.core</groupId>\n" +
+                                "            <artifactId>jackson-databind</artifactId>\n" +
+                                "        </dependency>"
+                );
+
+        String properties = new String(Files.readAllBytes(Paths.get(outputPath + "/src/main/resources/application.properties")));
+        Assertions.assertThat(properties)
+                .contains("spring.mvc.converters.preferred-json-mapper=gson")
+                .doesNotContain("spring.jackson.date-format=org.openapitools.RFC3339DateFormat");
+    }
 }

@@ -32,6 +32,9 @@
         {{#useSwaggerUI}}
         <swagger-ui.version>4.10.3</swagger-ui.version>
         {{/useSwaggerUI}}
+        {{#gson}}
+        <gson.version>2.9.0</gson.version>
+        {{/gson}}
     </properties>
 {{#parentOverridden}}
     <parent>
@@ -182,6 +185,7 @@
           <artifactId>jackson-dataformat-xml</artifactId>
         </dependency>
         {{/withXml}}
+        {{#jackson}}
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
@@ -192,6 +196,7 @@
             <artifactId>jackson-datatype-joda</artifactId>
         </dependency>
         {{/joda}}
+        {{/jackson}}
         {{#openApiNullable}}
         <dependency>
             <groupId>org.openapitools</groupId>
@@ -227,14 +232,23 @@
             <artifactId>spring-boot-starter-hateoas</artifactId>
         </dependency>
 {{/hateoas}}
+{{#jackson}}
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+{{/jackson}}
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+{{#gson}}
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
+        </dependency>
+{{/gson}}
     </dependencies>
 </project>

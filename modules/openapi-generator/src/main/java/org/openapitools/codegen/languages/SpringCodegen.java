@@ -105,6 +105,9 @@ public class SpringCodegen extends AbstractJavaCodegen
     public static final String OPEN_BRACE = "{";
     public static final String CLOSE_BRACE = "}";
 
+    public static final String SERIALIZATION_LIBRARY_GSON = "gson";
+    public static final String SERIALIZATION_LIBRARY_JACKSON = "jackson";
+
     protected String title = "OpenAPI Spring";
     protected String configPackage = "org.openapitools.configuration";
     protected String basePackage = "org.openapitools";
@@ -129,6 +132,7 @@ public class SpringCodegen extends AbstractJavaCodegen
     protected boolean useSpringController = false;
     protected boolean useSwaggerUI = true;
     protected boolean useSpringBoot3 = false;
+    protected String serializationLibrary = SERIALIZATION_LIBRARY_JACKSON;
 
     public SpringCodegen() {
         super();
@@ -159,8 +163,6 @@ public class SpringCodegen extends AbstractJavaCodegen
 
         apiTestTemplateFiles.clear(); // TODO: add test template
 
-        // spring uses the jackson lib
-        additionalProperties.put(JACKSON, "true");
         additionalProperties.put("openbrace", OPEN_BRACE);
         additionalProperties.put("closebrace", CLOSE_BRACE);
 
@@ -219,6 +221,14 @@ public class SpringCodegen extends AbstractJavaCodegen
                 .defaultValue(SPRING_BOOT);
         library.setEnum(supportedLibraries);
         cliOptions.add(library);
+
+        CliOption serializationLibrary = new CliOption(CodegenConstants.SERIALIZATION_LIBRARY, "Serialization library, default is jackson").defaultValue(SERIALIZATION_LIBRARY_JACKSON);
+        Map<String, String> serializationOptions = new HashMap<>();
+        serializationOptions.put(SERIALIZATION_LIBRARY_GSON, "Use Gson as serialization library");
+        serializationOptions.put(SERIALIZATION_LIBRARY_JACKSON, "Use Jackson as serialization library");
+        // TODO: add support for JSONB (pojo.mustache needs to be updated, see pojo.mustache from the Java client generator)
+        serializationLibrary.setEnum(serializationOptions);
+        cliOptions.add(serializationLibrary);
 
     }
 
@@ -473,9 +483,6 @@ public class SpringCodegen extends AbstractJavaCodegen
                 supportingFiles.add(new SupportingFile("SpringBootTest.mustache",
                     (testFolder + File.separator + basePackage).replace(".", java.io.File.separator),
                     "OpenApiGeneratorApplicationTests.java"));
-                supportingFiles.add(new SupportingFile("RFC3339DateFormat.mustache",
-                        (sourceFolder + File.separator + basePackage).replace(".", java.io.File.separator),
-                        "RFC3339DateFormat.java"));
             }
             if (SPRING_CLOUD_LIBRARY.equals(library)) {
                 supportingFiles.add(new SupportingFile("apiKeyRequestInterceptor.mustache",
@@ -585,6 +592,25 @@ public class SpringCodegen extends AbstractJavaCodegen
         if (apiFirst) {
             apiTemplateFiles.clear();
             modelTemplateFiles.clear();
+        }
+
+        if (additionalProperties.containsKey(CodegenConstants.SERIALIZATION_LIBRARY)) {
+            serializationLibrary = (String) additionalProperties.get(CodegenConstants.SERIALIZATION_LIBRARY);
+        }
+        switch (serializationLibrary) {
+            case SERIALIZATION_LIBRARY_JACKSON:
+                additionalProperties.put(SERIALIZATION_LIBRARY_JACKSON, "true");
+                additionalProperties.remove(SERIALIZATION_LIBRARY_GSON);
+                supportingFiles.add(new SupportingFile("RFC3339DateFormat.mustache",
+                        (sourceFolder + File.separator + basePackage).replace(".", java.io.File.separator),
+                        "RFC3339DateFormat.java"));
+                break;
+            case SERIALIZATION_LIBRARY_GSON:
+                additionalProperties.put(SERIALIZATION_LIBRARY_GSON, "true");
+                additionalProperties.remove(SERIALIZATION_LIBRARY_JACKSON);
+                break;
+            default:
+                throw new IllegalArgumentException("Unexpected serializationLibrary value: " + serializationLibrary);
         }
     }
 
@@ -902,17 +928,21 @@ public class SpringCodegen extends AbstractJavaCodegen
         }
 
         // Add imports for Jackson
-        if (!Boolean.TRUE.equals(model.isEnum)) {
-            model.imports.add("JsonProperty");
+        if (serializationLibrary.equals(SERIALIZATION_LIBRARY_JACKSON)) {
+            if (!Boolean.TRUE.equals(model.isEnum)) {
+                model.imports.add("JsonProperty");
 
-            if (Boolean.TRUE.equals(model.hasEnums)) {
-                model.imports.add("JsonValue");
+                if (Boolean.TRUE.equals(model.hasEnums)) {
+                    model.imports.add("JsonValue");
+                }
+            } else { // enum class
+                // Needed imports for Jackson's JsonCreator
+                if (additionalProperties.containsKey(JACKSON)) {
+                    model.imports.add("JsonCreator");
+                }
             }
-        } else { // enum class
-            // Needed imports for Jackson's JsonCreator
-            if (additionalProperties.containsKey(JACKSON)) {
-                model.imports.add("JsonCreator");
-            }
+        } else if (serializationLibrary.equals(SERIALIZATION_LIBRARY_GSON)) {
+            model.imports.add("SerializedName");
         }
 
         // Add imports for java.util.Arrays
